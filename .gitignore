@@ -45,5 +45,5 @@ app.*.map.json
 # ignore artifacts created with remix ide
 /contracts/artifacts
 
-# ignore .deps folder for remix account/tests
-/.deps/remix-tests
+# ignore .deps folder for remix account/tests and console.log
+/.deps
