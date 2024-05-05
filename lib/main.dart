@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:web3modal_flutter/web3modal_flutter.dart';
+import 'package:http/http.dart' as http;
 
 const projectID = String.fromEnvironment('PROJECT_ID');
 
@@ -16,6 +17,10 @@ final _hardHatChain = W3MChainInfo(
   rpcUrl: 'http://localhost:8545',
 );
 
+final _themeData = ThemeData(
+  colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+);
+
 void main() async {
   runApp(const MyApp());
 }
@@ -25,12 +30,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Dapp Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+    return Web3ModalTheme(
+      themeData: Web3ModalThemeData(
+        lightColors: Web3ModalColors.lightMode.copyWith(
+          accent100: _themeData.colorScheme.primary,
+          background125: _themeData.colorScheme.background,
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Dapp Demo'),
+      child: MaterialApp(
+        title: 'Flutter Dapp Demo',
+        theme: _themeData,
+        home: const MyHomePage(title: 'Flutter Dapp Demo'),
+      ),
     );
   }
 }
@@ -45,6 +56,8 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   late final W3MService _w3mService;
+  final client = Web3Client(_hardHatChain.rpcUrl, http.Client());
+
   var _contractAbi = '';
   var _contractData = Uint8List(0);
   var _contractAddress = '';
@@ -59,7 +72,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void _initWalletConnect() async {
     _w3mService = W3MService(
       projectId: projectID,
-      logLevel: LogLevel.debug,
+      //logLevel: LogLevel.debug,
       metadata: const PairingMetadata(
         name: 'Web3Modal Flutter Example',
         description: 'Web3Modal Flutter Example',
@@ -72,7 +85,7 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
     );
 
-    // add hardhat chain
+    // add hardhat chain to presets
     W3MChainPresets.chains
         .putIfAbsent(_hardHatChain.chainId, () => _hardHatChain);
     await _w3mService.init();
@@ -101,30 +114,19 @@ class _MyHomePageState extends State<MyHomePage> {
       data: _contractData,
     );
 
-    // final transactionHash =
-    //     await client.sendTransaction(credentials, transaction, chainId: 31337);
-
-    // output transactionReceipt
-    // final transactionReceipt =
-    //     await client.getTransactionReceipt(transactionHash);
-    // debugPrint('receipt: $transactionReceipt');
-
-    // // output deployed contract address
-    // debugPrint('contract address: ${transactionReceipt?.contractAddress}');
-
-    // contractAdressTemp = transactionReceipt?.contractAddress;
-
     debugPrint(_w3mService.selectedChain!.namespace);
     debugPrint(_w3mService.session!.topic!);
     debugPrint(_w3mService.session!.address);
 
+    // always launch the wallet before making a Transaction with Web3Modal
     _w3mService.launchConnectedWallet();
 
     final String transactionHash = await _w3mService.request(
       topic: _w3mService.session!.topic!,
-      chainId: _w3mService
-          .selectedChain!.namespace, // we need the namespace format here
+      // we need the namespace format here
+      chainId: _w3mService.selectedChain!.namespace,
       request: SessionRequestParams(
+        // w3model has string constant to help with request
         method: MethodsConstants.ethSendTransaction,
         params: [transaction.toJson()],
       ),
@@ -132,38 +134,47 @@ class _MyHomePageState extends State<MyHomePage> {
 
     debugPrint('hash: $transactionHash');
 
-    // final transactionReceipt = await _w3mService.request(
-    //   topic: _w3mService.session!.topic!,
-    //   chainId: _w3mService.selectedChain!.namespace,
-    //   request: const SessionRequestParams(
-    //     method: 'eth_getTransactionReceipt', // enum ??
-    //     params: ['0x262c0b9bc86a1a7064faf5e21cde89634cac6723ee611aedfcdf0f7f6e2e791b'],
-    //   ),
-    // );
+    //web3modal doesn't support `eth_getTransactionHash` with _w3mService.request(). However, you have the Web3dart
+    // bundle in Web3Modal so you can use it to get the package like so.
+    // you can list what available with _w3mService.session!.getApprovedMethods()
+    final transactionReceipt =
+        await client.getTransactionReceipt(transactionHash);
+    final transactionInformation =
+        await client.getTransactionByHash(transactionHash);
+    final networkId = await client.getNetworkId();
 
-    // debugPrint('receipt: $transactionReceipt');
+    debugPrint('transactionReceipt: $transactionReceipt');
+    debugPrint('transactionInformation: $transactionInformation');
+    debugPrint('network: $networkId');
 
-    debugPrint('${_w3mService.session!.getApprovedMethods()}');
+    debugPrint(
+        'calulate cost gasUnits X gasPriceForOneUnit ${transactionInformation!.gas * transactionInformation.gasPrice.getInWei.toInt()}');
+    debugPrint('transaction cost: ${transactionReceipt!.gasUsed}');
 
-    // _contractAddress =
-    //     jsonDecode(transactionReceipt)['result']['contractAddress'];
+    _contractAddress = transactionReceipt.contractAddress!.hex;
   }
 
   void _addEtherRequest() async {
-    await _w3mService.requestWriteContract(
+    _w3mService.launchConnectedWallet();
+    final String transactionHash = await _w3mService.requestWriteContract(
       rpcUrl: _w3mService.selectedChain!.rpcUrl,
       deployedContract: DeployedContract(
-        ContractAbi.fromJson(_contractAbi, 'logic'),
+        ContractAbi.fromJson(_contractAbi, 'logic_abi'),
         EthereumAddress.fromHex(_contractAddress),
       ),
-      topic: _w3mService.session?.topic ?? '',
-      chainId: _w3mService.selectedChain!.chainId,
+      topic: _w3mService.session!.topic!,
+      chainId: _w3mService.selectedChain!.namespace,
       functionName: 'add',
       transaction: Transaction(
-        //from: EthereumAddress.fromHex(_userAddress),
-        value: EtherAmount.fromInt(EtherUnit.ether, 10), // == 0.010
+        from: EthereumAddress.fromHex(_w3mService.session!.address!),
+        value: EtherAmount.fromInt(EtherUnit.ether, 10),
       ),
     );
+
+    final transactionReceipt =
+        await client.getTransactionReceipt(transactionHash);
+
+    print('ADD Transaction: $transactionReceipt');
   }
 
   void _retrieveEtherRequest() {
