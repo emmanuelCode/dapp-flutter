@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import 'package:cryptofont/cryptofont.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:web3modal_flutter/web3modal_flutter.dart';
 import 'package:http/http.dart' as http;
 
@@ -61,6 +63,10 @@ class _MyHomePageState extends State<MyHomePage> {
   var _contractAbi = '';
   var _contractData = Uint8List(0);
   var _contractAddress = '';
+
+  var _etherUnitValue = EtherUnit.values.first;
+  final _textEditAmount = TextEditingController();
+  var _currentContractBalance = BigInt.zero;
 
   @override
   initState() {
@@ -167,7 +173,8 @@ class _MyHomePageState extends State<MyHomePage> {
       functionName: 'add',
       transaction: Transaction(
         from: EthereumAddress.fromHex(_w3mService.session!.address!),
-        value: EtherAmount.fromInt(EtherUnit.ether, 10),
+        value: EtherAmount.fromInt(
+            _etherUnitValue, int.parse(_textEditAmount.text)),
       ),
     );
 
@@ -175,10 +182,40 @@ class _MyHomePageState extends State<MyHomePage> {
         await client.getTransactionReceipt(transactionHash);
 
     print('ADD Transaction: $transactionReceipt');
+
+    _updateContractAmount();
   }
 
-  void _retrieveEtherRequest() {
-    print('not implemented');
+  void _retrieveEtherRequest() async {
+    _w3mService.launchConnectedWallet();
+    final String transactionHash = await _w3mService.requestWriteContract(
+      rpcUrl: _w3mService.selectedChain!.rpcUrl,
+      deployedContract: DeployedContract(
+        ContractAbi.fromJson(_contractAbi, 'logic_abi'),
+        EthereumAddress.fromHex(_contractAddress),
+      ),
+      topic: _w3mService.session!.topic!,
+      chainId: _w3mService.selectedChain!.namespace,
+      functionName: 'retrieve',
+      transaction: Transaction(
+        from: EthereumAddress.fromHex(_w3mService.session!.address!),
+      ),
+    );
+
+    final transactionReceipt =
+        await client.getTransactionReceipt(transactionHash);
+
+    print('Retrieve Transaction: $transactionReceipt');
+    _updateContractAmount();
+  }
+
+  void _updateContractAmount() async {
+    final contractAmount =
+        await client.getBalance(EthereumAddress.fromHex(_contractAddress));
+
+    setState(() {
+      _currentContractBalance = contractAmount.getInEther;
+    });
   }
 
   @override
@@ -188,21 +225,24 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
       ),
-      body: Center(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Text(
-              'Wallet Connect',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                ImageIcon(
+                  const AssetImage('assets/logo_wc.png'),
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 48,
+                ),
+                W3MConnectWalletButton(service: _w3mService),
+              ],
             ),
+            const SizedBox(height: 32),
             // connect your wallet buttons
-            W3MConnectWalletButton(
-              service: _w3mService,
-            ),
-            W3MNetworkSelectButton(
-              service: _w3mService,
-            ),
+            W3MNetworkSelectButton(service: _w3mService),
             W3MAccountButton(service: _w3mService),
             const SizedBox(height: 12),
             ElevatedButton.icon(
@@ -210,26 +250,63 @@ class _MyHomePageState extends State<MyHomePage> {
               icon: const Icon(Icons.rocket_launch),
               label: const Text('Deploy Contract'),
             ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton(
+                        iconEnabledColor: Theme.of(context).colorScheme.primary,
+                        value: _etherUnitValue,
+                        items: EtherUnit.values
+                            .map(
+                              (e) => DropdownMenuItem<EtherUnit>(
+                                value: e,
+                                child: Text(e.name.toUpperCase()),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _etherUnitValue = value!;
+                          });
+                        }),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _textEditAmount,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        prefixIcon: Icon(
+                          CryptoFontIcons.eth,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                        labelText: 'Amount',
+                      ),
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: _addEtherRequest,
+                    //icon: const Icon(CryptoFontIcons.eth),
+                    child: const Text('Deposit'),
+                  )
+                ],
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: _retrieveEtherRequest,
+              icon: const Icon(Icons.savings),
+              label: const Text('Retrieve Savings'),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Contract Balance\n $_currentContractBalance ETH',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
           ],
         ),
-      ),
-      floatingActionButton: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton(
-            onPressed: _addEtherRequest,
-            tooltip: 'Add Ether',
-            child: const Icon(Icons.add),
-          ),
-          const SizedBox(
-            width: 12,
-          ),
-          FloatingActionButton(
-            onPressed: _retrieveEtherRequest,
-            tooltip: 'Retrieve Ether',
-            child: const Icon(Icons.remove),
-          ),
-        ],
       ),
     );
   }
