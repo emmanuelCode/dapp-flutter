@@ -154,7 +154,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   ElevatedButton(
                     onPressed: _addEtherRequest,
-                    //icon: const Icon(CryptoFontIcons.eth),
                     child: const Text('Deposit'),
                   )
                 ],

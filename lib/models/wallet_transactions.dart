@@ -31,12 +31,13 @@ class WalletTransactions {
   void _initWalletConnect() async {
     _w3mService = W3MService(
       projectId: projectID,
-      //logLevel: LogLevel.debug,
+      // replace with your own info
       metadata: const PairingMetadata(
         name: 'Web3Modal Flutter Example',
-        description: 'Web3Modal Flutter Example',
-        url: 'https://www.walletconnect.com/',
-        icons: ['https://walletconnect.com/walletconnect-logo.png'],
+        description: 'A Sample Dapp in Flutter',
+        url: 'https://flutter.dev/',
+        // flutter logo on the web
+        icons: ['https://storage.googleapis.com/cms-storage-bucket/0dbfcc7a59cd1cf16282.png'],
         redirect: Redirect(
           native: 'flutterdapp://',
           universal: 'https://www.walletconnect.com',
