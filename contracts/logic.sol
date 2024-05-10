@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.24.0;
+pragma solidity ^0.8.25.0;
 
-import "contracts/storage.sol";
+import {Storage} from "contracts/storage.sol";
 
 // add and remove from total
 contract Logic is Storage {
