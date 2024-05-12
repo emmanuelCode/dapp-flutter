@@ -1,0 +1,4 @@
+# hardhat files to ignore 
+node_modules
+package.json
+package-lock.json
